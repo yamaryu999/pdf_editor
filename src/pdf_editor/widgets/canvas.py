@@ -446,6 +446,9 @@ class TextGraphicsItem(QtWidgets.QGraphicsRectItem):
         if change == QtWidgets.QGraphicsItem.ItemPositionHasChanged:
             self._emit_geometry_changed()
         return super().itemChange(change, value)
+
+
+class PageCanvas(QtWidgets.QGraphicsView):
     """Displays a PDF page preview with editable elements."""
 
     selectionChanged = QtCore.Signal(list)
