@@ -34,10 +34,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._create_menu()
 
         self.page_list = QtWidgets.QListWidget()
+        self.page_list.setObjectName("PageList")
         self.page_list.currentRowChanged.connect(self._handle_page_change)
         self.page_list.setMaximumWidth(220)
 
         self.canvas = PageCanvas()
+        self.canvas.setObjectName("PageCanvas")
         self.canvas.elementSelected.connect(self._handle_element_selected)
         self.canvas.elementGeometryEdited.connect(self._handle_canvas_geometry_edited)
 
@@ -48,6 +50,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(splitter)
 
         self.property_panel = PropertyPanel()
+        self.property_panel.setObjectName("PropertyPanel")
         self.property_panel.geometryEdited.connect(self._handle_property_geometry_edited)
 
         dock = QtWidgets.QDockWidget("Properties", self)
@@ -80,6 +83,8 @@ class MainWindow(QtWidgets.QMainWindow):
         edit_menu.addAction(self.insert_image_action)
 
         toolbar = self.addToolBar("Main")
+        toolbar.setMovable(False)
+        toolbar.setIconSize(QtCore.QSize(20, 20))
         toolbar.addAction(self.open_action)
         toolbar.addAction(self.save_action)
         toolbar.addSeparator()

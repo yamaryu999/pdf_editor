@@ -18,6 +18,8 @@ class PropertyPanel(QtWidgets.QWidget):
         self._updating = False
 
         layout = QtWidgets.QFormLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
         self.x_spin = self._create_spin_box()
         self.y_spin = self._create_spin_box()
         self.width_spin = self._create_spin_box()
@@ -58,6 +60,7 @@ class PropertyPanel(QtWidgets.QWidget):
         spin.setDecimals(1)
         spin.setRange(0.0, 5000.0)
         spin.setSingleStep(5.0)
+        spin.setMinimumWidth(120)
         return spin
 
     def _handle_value_changed(self, _value: float) -> None:

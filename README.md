@@ -47,6 +47,8 @@ python -m pdf_editor.app
   - ファイル > 名前を付けて保存 … 編集後 PDF を書き出し
   - 編集 > 画像挿入 … 画像ファイルを挿入
 
+本アプリは `qt-material` を利用して、全体をマテリアルデザイン風のテーマで表示します。
+
 ## 基本的な使い方
 
 1. 「ファイル > 開く」から PDF を選択  
@@ -55,6 +57,21 @@ python -m pdf_editor.app
 4. 挿入された画像をキャンバス上でドラッグして位置を調整  
 5. より細かい調整が必要な場合は、右側プロパティパネルの X / Y / Width / Height を変更  
 6. 「ファイル > 名前を付けて保存」で編集済み PDF を書き出し  
+
+## テーマの変更
+
+環境変数 `PDF_EDITOR_THEME` を使うことで、`qt-material` が提供する別テーマに切り替えられます。
+
+```bash
+PDF_EDITOR_THEME=light_blue.xml pdf-editor
+```
+
+テーマ名の例（一部）:
+
+- `dark_teal.xml`（デフォルト）
+- `light_blue.xml`
+- `dark_blue.xml`
+- `light_cyan.xml`
 
 ## ライセンス
 
