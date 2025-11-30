@@ -152,6 +152,7 @@ class MainWindow(QtWidgets.QMainWindow):
         theme_pref = self.settings.value("theme", None)
         env_theme = os.getenv("PDF_EDITOR_THEME")
         self.current_theme = theme_pref or env_theme or "dark_teal.xml"
+        self._palette = self._palette_for_theme(self.current_theme)
 
         self.thumbnail_size = int(self.settings.value("thumbnail_size", 110))
         self.default_page_width = float(self.settings.value("default_page_width", 595.0))
@@ -186,7 +187,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.page_list = QtWidgets.QListWidget()
         self.page_list.setObjectName("PageList")
-        self.page_list.setSpacing(6)
+        self.page_list.setSpacing(8)
+        self.page_list.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
         self.page_list.currentRowChanged.connect(self._handle_page_change)
         self.page_list.setIconSize(QtCore.QSize(self.thumbnail_size, int(self.thumbnail_size * 1.4)))
 
@@ -203,24 +205,29 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.page_filter_input = QtWidgets.QLineEdit()
         self.page_filter_input.setPlaceholderText("ラベルでフィルター")
+        self.page_filter_input.setClearButtonEnabled(True)
         self.page_filter_input.textChanged.connect(self._handle_page_filter_changed)
 
         self.page_label_input = QtWidgets.QLineEdit()
         self.page_label_input.setPlaceholderText("ページラベル")
+        self.page_label_input.setClearButtonEnabled(True)
         self.page_label_input.editingFinished.connect(self._handle_page_label_edited)
 
         self.page_note_input = QtWidgets.QPlainTextEdit()
         self.page_note_input.setPlaceholderText("メモ")
-        self.page_note_input.setFixedHeight(80)
+        self.page_note_input.setMinimumHeight(110)
         self.page_note_input.textChanged.connect(self._handle_page_note_changed)
 
         page_panel = QtWidgets.QWidget()
-        page_panel.setMinimumWidth(220)
+        page_panel.setMinimumWidth(320)
+        page_panel.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+        page_panel.setObjectName("SidePanel")
         page_layout = QtWidgets.QVBoxLayout(page_panel)
-        page_layout.setContentsMargins(8, 8, 8, 8)
-        page_layout.setSpacing(8)
+        page_layout.setContentsMargins(12, 12, 12, 12)
+        page_layout.setSpacing(12)
 
-        page_layout.addWidget(self.page_search)
+        nav_card, nav_layout = self._create_card("ページを探す")
+        nav_layout.addWidget(self.page_search)
 
         slider_layout = QtWidgets.QHBoxLayout()
         slider_label = QtWidgets.QLabel("サムネイルサイズ")
@@ -230,46 +237,93 @@ class MainWindow(QtWidgets.QMainWindow):
         value_label.setObjectName("ThumbnailValueLabel")
         slider_layout.addWidget(value_label, alignment=QtCore.Qt.AlignRight)
         self.thumbnail_value_label = value_label
-        page_layout.addLayout(slider_layout)
-        page_layout.addWidget(self.page_zoom_slider)
-        page_layout.addWidget(self.page_filter_input)
-        page_layout.addWidget(self.page_label_input)
-        page_layout.addWidget(self.page_note_input)
-        page_layout.addWidget(self.page_list, stretch=1)
+        nav_layout.addLayout(slider_layout)
+        nav_layout.addWidget(self.page_zoom_slider)
+        nav_layout.addWidget(self.page_filter_input)
+        page_layout.addWidget(nav_card)
+
+        list_card, list_layout = self._create_card("ページ一覧")
+        list_layout.addWidget(self.page_list)
+        list_tab = QtWidgets.QWidget()
+        list_tab_layout = QtWidgets.QVBoxLayout(list_tab)
+        list_tab_layout.setContentsMargins(0, 0, 0, 0)
+        list_tab_layout.setSpacing(12)
+        list_tab_layout.addWidget(nav_card)
+        list_tab_layout.addWidget(list_card, stretch=1)
+
+        meta_card, meta_layout = self._create_card("ページメモ")
+        meta_layout.addWidget(self._create_field_label("ラベル"))
+        meta_layout.addWidget(self.page_label_input)
+        meta_layout.addWidget(self._create_field_label("メモ"))
+        meta_layout.addWidget(self.page_note_input)
+        meta_tab = QtWidgets.QWidget()
+        meta_tab_layout = QtWidgets.QVBoxLayout(meta_tab)
+        meta_tab_layout.setContentsMargins(0, 0, 0, 0)
+        meta_tab_layout.setSpacing(12)
+        meta_tab_layout.addWidget(meta_card)
+        meta_tab_layout.addStretch(1)
+
+        page_tabs = QtWidgets.QTabWidget()
+        page_tabs.setObjectName("PageTabs")
+        page_tabs.addTab(list_tab, "一覧")
+        page_tabs.addTab(meta_tab, "メモ")
+        page_layout.addWidget(page_tabs, stretch=1)
 
         self.canvas = PageCanvas()
         self.canvas.setObjectName("PageCanvas")
+        self.canvas.setFrameShape(QtWidgets.QFrame.NoFrame)
         self.canvas.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.canvas.selectionChanged.connect(self._handle_selection_changed)
         self.canvas.elementGeometryEdited.connect(self._handle_canvas_geometry_edited)
         self.canvas.customContextMenuRequested.connect(self._show_canvas_context_menu)
 
-        splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
-        splitter.addWidget(page_panel)
-        splitter.addWidget(self.canvas)
-        splitter.setStretchFactor(1, 1)
-        self.setCentralWidget(splitter)
+        self.setCentralWidget(self.canvas)
+
+        pages_dock = QtWidgets.QDockWidget("Pages", self)
+        pages_dock.setObjectName("PagesDock")
+        pages_dock.setWidget(page_panel)
+        pages_dock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
+        pages_dock.setFeatures(
+            QtWidgets.QDockWidget.DockWidgetMovable
+            | QtWidgets.QDockWidget.DockWidgetFloatable
+            | QtWidgets.QDockWidget.DockWidgetClosable
+        )
+        pages_dock.setMinimumWidth(340)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, pages_dock)
+        self.resizeDocks([pages_dock], [360], QtCore.Qt.Horizontal)
 
         self.property_panel = PropertyPanel()
         self.property_panel.setObjectName("PropertyPanel")
         self.property_panel.geometryEdited.connect(self._handle_property_geometry_edited)
         self.property_panel.opacityEdited.connect(self._handle_property_opacity_changed)
 
-        dock = QtWidgets.QDockWidget("Properties", self)
-        dock.setWidget(self.property_panel)
-        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
+        prop_dock = QtWidgets.QDockWidget("Properties", self)
+        prop_dock.setObjectName("PropertiesDock")
+        prop_dock.setWidget(self.property_panel)
+        prop_dock.setAllowedAreas(QtCore.Qt.RightDockWidgetArea)
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, prop_dock)
 
         self.layer_tree = QtWidgets.QTreeWidget()
         self.layer_tree.setColumnCount(3)
         self.layer_tree.setHeaderLabels(["要素", "表示", "ロック"])
         self.layer_tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
+        self.layer_tree.setAlternatingRowColors(True)
+        self.layer_tree.setRootIsDecorated(False)
         self.layer_tree.itemChanged.connect(self._handle_layer_item_changed)
         self.layer_tree.itemSelectionChanged.connect(self._handle_layer_selection_changed)
         layers_dock = QtWidgets.QDockWidget("Layers", self)
+        layers_dock.setObjectName("LayersDock")
         layers_dock.setWidget(self.layer_tree)
+        layers_dock.setAllowedAreas(QtCore.Qt.RightDockWidgetArea)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, layers_dock)
-        self.tabifyDockWidget(dock, layers_dock)
-        dock.raise_()
+        self.tabifyDockWidget(prop_dock, layers_dock)
+        prop_dock.raise_()
+
+        if hasattr(self, "view_menu") and self.view_menu:
+            self.view_menu.addSeparator()
+            self.view_menu.addAction(pages_dock.toggleViewAction())
+            self.view_menu.addAction(prop_dock.toggleViewAction())
+            self.view_menu.addAction(layers_dock.toggleViewAction())
 
         status = self.statusBar()
         status.showMessage("PDF を開いて編集を開始してください。")
@@ -280,6 +334,24 @@ class MainWindow(QtWidgets.QMainWindow):
         self.autosave_status_label = QtWidgets.QLabel("AutoSave: Idle")
         status.addPermanentWidget(self.autosave_status_label)
         self.autosave_status_label.setText("AutoSave: 保存済み")
+
+    def _create_card(self, title: str) -> tuple[QtWidgets.QFrame, QtWidgets.QVBoxLayout]:
+        card = QtWidgets.QFrame()
+        card.setObjectName("Card")
+        layout = QtWidgets.QVBoxLayout(card)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+        heading = QtWidgets.QLabel(title)
+        heading.setObjectName("CardTitle")
+        heading.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        layout.addWidget(heading)
+        return card, layout
+
+    def _create_field_label(self, text: str) -> QtWidgets.QLabel:
+        label = QtWidgets.QLabel(text)
+        label.setObjectName("FieldLabel")
+        label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        return label
 
     def _create_actions(self) -> None:
         self.open_action = QtGui.QAction("開く...", self)
@@ -394,6 +466,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self.settings_action = QtGui.QAction("設定...", self)
         self.settings_action.triggered.connect(self._open_settings_dialog)
 
+        style = self.style()
+        self.open_action.setIcon(style.standardIcon(QtWidgets.QStyle.SP_DialogOpenButton))
+        self.save_action.setIcon(style.standardIcon(QtWidgets.QStyle.SP_DialogSaveButton))
+        self.insert_image_action.setIcon(style.standardIcon(QtWidgets.QStyle.SP_FileIcon))
+        self.delete_element_action.setIcon(style.standardIcon(QtWidgets.QStyle.SP_TrashIcon))
+        self.duplicate_element_action.setIcon(style.standardIcon(QtWidgets.QStyle.SP_FileDialogNewFolder))
+        self.undo_action.setIcon(style.standardIcon(QtWidgets.QStyle.SP_ArrowBack))
+        self.redo_action.setIcon(style.standardIcon(QtWidgets.QStyle.SP_ArrowForward))
+        self.add_page_action.setIcon(style.standardIcon(QtWidgets.QStyle.SP_FileDialogNewFolder))
+        self.remove_page_action.setIcon(style.standardIcon(QtWidgets.QStyle.SP_DialogCancelButton))
+        self.move_page_up_action.setIcon(style.standardIcon(QtWidgets.QStyle.SP_ArrowUp))
+        self.move_page_down_action.setIcon(style.standardIcon(QtWidgets.QStyle.SP_ArrowDown))
+        self.bring_forward_action.setIcon(style.standardIcon(QtWidgets.QStyle.SP_ArrowUp))
+        self.send_backward_action.setIcon(style.standardIcon(QtWidgets.QStyle.SP_ArrowDown))
+
     def _create_menu(self) -> None:
         file_menu = self.menuBar().addMenu("ファイル")
         file_menu.addAction(self.open_action)
@@ -418,8 +505,8 @@ class MainWindow(QtWidgets.QMainWindow):
         page_menu.addAction(self.move_page_up_action)
         page_menu.addAction(self.move_page_down_action)
 
-        view_menu = self.menuBar().addMenu("表示")
-        view_menu.addAction(self.toggle_grid_action)
+        self.view_menu = self.menuBar().addMenu("表示")
+        self.view_menu.addAction(self.toggle_grid_action)
 
         settings_menu = self.menuBar().addMenu("設定")
         settings_menu.addAction(self.settings_action)
@@ -429,7 +516,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         toolbar = self.addToolBar("Main")
         toolbar.setMovable(False)
-        toolbar.setIconSize(QtCore.QSize(20, 20))
+        toolbar.setIconSize(QtCore.QSize(22, 22))
+        toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
         toolbar.addAction(self.open_action)
         toolbar.addAction(self.save_action)
         toolbar.addSeparator()
@@ -531,7 +619,9 @@ class MainWindow(QtWidgets.QMainWindow):
             if page.note:
                 item.setToolTip(page.note)
             self.page_list.addItem(item)
-        if self.current_page_index is not None:
+        if self.page_list.count() == 0:
+            self._handle_page_change(-1)
+        elif self.current_page_index is not None:
             self._select_page_row(self.current_page_index)
 
     def _handle_page_change(self, index: int) -> None:
@@ -1206,16 +1296,18 @@ class MainWindow(QtWidgets.QMainWindow):
         if current_id == target_id:
             return
         self.page_list.blockSignals(True)
-        matched = False
+        matched_row = -1
         for row in range(self.page_list.count()):
             item = self.page_list.item(row)
             if item and item.data(QtCore.Qt.UserRole) == target_id:
                 self.page_list.setCurrentRow(row)
-                matched = True
+                matched_row = row
                 break
-        if not matched:
-            self.page_list.clearSelection()
         self.page_list.blockSignals(False)
+        if matched_row >= 0:
+            self._handle_page_change(matched_row)
+        else:
+            self.page_list.clearSelection()
 
     def _open_settings_dialog(self) -> None:
         dialog = SettingsDialog(
@@ -1244,7 +1336,230 @@ class MainWindow(QtWidgets.QMainWindow):
         if not app:
             return
         apply_stylesheet(app, theme=theme_name)
+        self._palette = self._palette_for_theme(theme_name)
+        base_stylesheet = app.styleSheet()
+        app.setStyleSheet(base_stylesheet + self._build_stylesheet(self._palette))
+        self.canvas.setBackgroundBrush(QtGui.QColor(self._palette["canvas_bg"]))
+        self.statusBar().setStyleSheet(
+            f"background:{self._palette['panel']};"
+            f"color:{self._palette['muted_text']};"
+            f"border-top:1px solid {self._palette['border']};"
+        )
         self.statusBar().showMessage(f"テーマを {theme_name} に変更しました。", 3000)
+
+    def _palette_for_theme(self, theme_name: str) -> Dict[str, str]:
+        is_light = theme_name.startswith("light")
+        if is_light:
+            return {
+                "surface": "#f6f8fb",
+                "panel": "#ffffff",
+                "card": "#ffffff",
+                "border": "#d8e0ea",
+                "hover": "#eef3fb",
+                "accent": "#2d6cdf",
+                "accent_soft": "#dfe9fb",
+                "accent_hover": "#1f5fc4",
+                "text": "#1f2933",
+                "muted_text": "#516076",
+                "canvas_bg": "#eef2f7",
+                "selection": "#e5edfa",
+            }
+        return {
+            "surface": "#0f172a",
+            "panel": "#0b1326",
+            "card": "#0e1a2f",
+            "border": "#1f2a44",
+            "hover": "#15233a",
+            "accent": "#5ab3f5",
+            "accent_soft": "#12314f",
+            "accent_hover": "#74c3ff",
+            "text": "#e4edf7",
+            "muted_text": "#9fb2c8",
+            "canvas_bg": "#0a101e",
+            "selection": "#1f3a5f",
+        }
+
+    def _build_stylesheet(self, colors: Dict[str, str]) -> str:
+        return f"""
+        /* Modern surface overrides */
+        QWidget {{
+            color: {colors['text']};
+            font-family: "Inter", "Noto Sans", "Segoe UI", sans-serif;
+            font-size: 11pt;
+        }}
+        QMainWindow {{
+            background: {colors['surface']};
+        }}
+        QFrame#SidePanel {{
+            background: {colors['panel']};
+            border: 1px solid {colors['border']};
+            border-radius: 14px;
+        }}
+        QFrame#Card {{
+            background: {colors['card']};
+            border: 1px solid {colors['border']};
+            border-radius: 12px;
+        }}
+        QLabel#CardTitle {{
+            font-size: 10pt;
+            font-weight: 600;
+            color: {colors['muted_text']};
+            padding-bottom: 2px;
+        }}
+        QLabel#FieldLabel {{
+            color: {colors['muted_text']};
+            font-size: 9.5pt;
+            padding-top: 2px;
+        }}
+        QLabel#ThumbnailValueLabel {{
+            color: {colors['muted_text']};
+        }}
+        QGraphicsView#PageCanvas {{
+            background: {colors['canvas_bg']};
+            border: 1px solid {colors['border']};
+            border-radius: 14px;
+        }}
+        QLineEdit,
+        QPlainTextEdit,
+        QSpinBox,
+        QDoubleSpinBox,
+        QComboBox {{
+            background: {colors['surface']};
+            color: {colors['text']};
+            border: 1px solid {colors['border']};
+            border-radius: 8px;
+            padding: 8px 10px;
+        }}
+        QPlainTextEdit {{
+            padding: 10px;
+        }}
+        QLineEdit:focus,
+        QPlainTextEdit:focus,
+        QSpinBox:focus,
+        QDoubleSpinBox:focus,
+        QComboBox:focus {{
+            border: 1px solid {colors['accent']};
+        }}
+        QListWidget#PageList {{
+            background: {colors['card']};
+            border: 1px solid {colors['border']};
+            border-radius: 12px;
+            padding: 6px;
+        }}
+        QListWidget#PageList::item {{
+            background: transparent;
+            margin: 2px;
+            padding: 10px 8px;
+            border-radius: 10px;
+        }}
+        QListWidget#PageList::item:selected {{
+            background: {colors['accent_soft']};
+            border: 1px solid {colors['accent']};
+            color: {colors['text']};
+        }}
+        QListWidget#PageList::item:hover {{
+            background: {colors['hover']};
+        }}
+        QToolBar {{
+            background: {colors['panel']};
+            border: 1px solid {colors['border']};
+            padding: 6px;
+            spacing: 8px;
+        }}
+        QToolBar QToolButton {{
+            padding: 6px 10px;
+            border-radius: 10px;
+        }}
+        QToolBar QToolButton:hover {{
+            background: {colors['hover']};
+        }}
+        QToolBar QToolButton:checked {{
+            background: {colors['accent_soft']};
+            border: 1px solid {colors['accent']};
+        }}
+        QStatusBar {{
+            background: {colors['panel']};
+            border-top: 1px solid {colors['border']};
+            color: {colors['muted_text']};
+        }}
+        QDockWidget {{
+            background: {colors['panel']};
+            border: 1px solid {colors['border']};
+        }}
+        QDockWidget::title {{
+            padding: 8px 10px;
+            background: {colors['panel']};
+            color: {colors['muted_text']};
+            border-bottom: 1px solid {colors['border']};
+        }}
+        QTabWidget::pane {{
+            border: 1px solid {colors['border']};
+            border-radius: 10px;
+            background: {colors['card']};
+        }}
+        QTabBar::tab {{
+            background: {colors['panel']};
+            color: {colors['muted_text']};
+            padding: 8px 14px;
+            border-top-left-radius: 10px;
+            border-top-right-radius: 10px;
+            margin-right: 2px;
+        }}
+        QTabBar::tab:selected {{
+            background: {colors['card']};
+            color: {colors['text']};
+            border: 1px solid {colors['border']};
+            border-bottom: 1px solid {colors['card']};
+        }}
+        QTreeWidget {{
+            background: {colors['card']};
+            border: 1px solid {colors['border']};
+            border-radius: 10px;
+        }}
+        QTreeWidget::item:selected {{
+            background: {colors['accent_soft']};
+            color: {colors['text']};
+        }}
+        QSlider::groove:horizontal {{
+            background: {colors['border']};
+            height: 6px;
+            border-radius: 4px;
+        }}
+        QSlider::handle:horizontal {{
+            background: {colors['accent']};
+            width: 16px;
+            margin: -6px 0;
+            border-radius: 8px;
+        }}
+        QPushButton {{
+            background: {colors['accent']};
+            color: #ffffff;
+            border-radius: 10px;
+            padding: 8px 14px;
+            border: none;
+        }}
+        QPushButton:hover {{
+            background: {colors['accent_hover']};
+        }}
+        QPushButton:disabled {{
+            background: {colors['border']};
+            color: {colors['muted_text']};
+        }}
+        QMenuBar {{
+            background: {colors['panel']};
+            border: none;
+        }}
+        QMenuBar::item:selected {{
+            background: {colors['hover']};
+        }}
+        QMenu {{
+            background: {colors['card']};
+            border: 1px solid {colors['border']};
+        }}
+        QMenu::item:selected {{
+            background: {colors['accent_soft']};
+        }}
+        """
 
     def _mark_unsaved(self) -> None:
         self._unsaved_changes = True
