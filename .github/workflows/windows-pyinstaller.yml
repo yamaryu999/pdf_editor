@@ -26,7 +26,7 @@ jobs:
           pip install pyinstaller
 
       - name: Build exe with PyInstaller
-        run: pyinstaller -m pdf_editor.app --name PdfEditor --noconsole --onefile --collect-data qt_material
+        run: pyinstaller run_pdf_editor.py --name PdfEditor --noconsole --onefile --collect-data qt_material
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
